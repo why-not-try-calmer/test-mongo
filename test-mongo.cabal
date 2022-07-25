@@ -43,7 +43,7 @@ executable test-mongo-exe
       Paths_test_mongo
   hs-source-dirs:
       app
-  ghc-options: -threaded -rtsopts -with-rtsopts=-N
+  ghc-options: -threaded -rtsopts -with-rtsopts=-N -O0
   build-depends:
       base >=4.7 && <5
     , hspec
@@ -59,7 +59,7 @@ test-suite test-mongo-test
       Paths_test_mongo
   hs-source-dirs:
       test
-  ghc-options: -threaded -rtsopts -with-rtsopts=-N
+  ghc-options: -threaded -rtsopts -with-rtsopts=-N -O0
   build-depends:
       base >=4.7 && <5
     , hspec

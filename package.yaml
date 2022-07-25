@@ -36,6 +36,7 @@ executables:
     - -threaded
     - -rtsopts
     - -with-rtsopts=-N
+    - -O0
     dependencies:
     - test-mongo
 
@@ -47,5 +48,7 @@ tests:
     - -threaded
     - -rtsopts
     - -with-rtsopts=-N
+    - -O0
     dependencies:
     - test-mongo
+    - hspec

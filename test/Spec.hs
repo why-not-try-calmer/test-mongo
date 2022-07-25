@@ -4,30 +4,15 @@
 
 import Control.Exception (SomeException (SomeException), try)
 import Control.Monad (foldM)
+import Control.Monad.IO.Class
 import Data.Data (Data)
+import Data.Foldable (traverse_)
 import Data.Maybe (fromJust)
 import qualified Data.Text as T
 import Data.Traversable (for)
 import Database.MongoDB hiding (lookup)
 import System.Environment (getEnvironment)
 import Test.Hspec
-
-{-
-hostName :: String
-hostName = "cluster0.xpugk.mongodb.net"
-
-databaseName :: Database
-databaseName = "test-db"
-
-userName :: Username
-userName = "tester"
-
-password :: Password
-password = "95BqF22T78gUUanH"
-
-collec :: Collection
-collec = "test-collection"
--}
 
 data Config = Config
     { hostName :: String
@@ -66,37 +51,45 @@ runMongo db_name p = access p master db_name
 
 spec :: Spec
 spec = do
-    (config, pipe) <- runIO $ do
+    (config, pipe) <- initialization
+    validateConnector pipe
+    traverse_ (\f -> f config pipe) [testWritesWith, testDeleteWith, testReadsWith]
+  where
+    initialization = runIO $ do
         config <- makeConfig
         pipe <- setupAuthConnection config
         pure (config, pipe)
-    validateConnector pipe >> testWritesWith config pipe >> testReadsWith config pipe
-  where
     validateConnector c =
-        let desc = describe "Validate the MongoDB Atlas connector"
-            as = it "The connection should be established and login successful"
+        let desc = describe "Validate"
+            as = it "Validate the MongoDB Atlas connector"
             target = case c of
                 Left err -> print "Connector is not logged in!" >> undefined
                 Right p -> do
                     verdict <- isClosed p
                     verdict `shouldBe` False
          in desc $ as target
+    testDeleteWith Config{..} p =
+        let desc = describe "Delete"
+            as = it "Ensures deletion works"
+            target = case p of
+                Left err -> print "Connector is not logged in!" >> undefined
+                Right c -> do
+                    deleted <- runMongo databaseName c $ deleteAll collect []
+                    failed deleted `shouldBe` False
+         in desc $ as target
     testWritesWith Config{..} p =
-        let desc = describe "Tries writing to the db"
-            as = it "Writes are OK"
+        let desc = describe "Writes"
+            as = it "Ensures writes work"
             target = case p of
                 Left err -> print "Connector is not logged in!" >> undefined
                 Right c -> do
                     let docs = map (\n -> ["test_doc" =: (n :: Int)]) [1 .. 3]
-                        action = do
-                            deleteAll collect []
-                            insertMany collect docs
-                    res <- runMongo databaseName c action
-                    length res `shouldBe` 3
+                    inserted <- runMongo databaseName c $ insertMany collect docs
+                    length inserted `shouldBe` 3
          in desc $ as target
     testReadsWith Config{..} c =
-        let desc = describe "Tries reading from the db"
-            as = it "Reads are OK"
+        let desc = describe "Reads"
+            as = it "Ensures reads work"
             target = case c of
                 Left err -> print "Connector is not logged in!" >> undefined
                 Right p -> do
