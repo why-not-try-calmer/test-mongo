@@ -1,0 +1,5 @@
+hname=cluster0.xpugk.mongodb.net
+dname=test-db
+uname=tester
+pword=95BqF22T78gUUanH
+coll=test-collection
