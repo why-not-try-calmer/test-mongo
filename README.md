@@ -16,7 +16,7 @@ uname=tester
 pword=95BqF22T78gUUanH
 coll=test-collection
 ```
-provided in this repository has `ENVARS.txt`.
+provided in this repository as `ENVARS.txt`.
 
 ## Building
 After cloning and cd-ing to the direct, build with:
