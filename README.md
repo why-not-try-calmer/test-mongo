@@ -15,6 +15,7 @@ dname=test-db
 uname=tester
 pword=95BqF22T78gUUanH
 coll=test-collection
+repname=<name of you local replica set, default port 27017 will be used>
 ```
 provided in this repository as `ENVARS.txt`.
 

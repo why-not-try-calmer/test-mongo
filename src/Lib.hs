@@ -1,3 +1,4 @@
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
@@ -17,6 +18,7 @@ import Data.Traversable (for)
 import Database.MongoDB hiding (lookup)
 import System.Environment (getEnvironment)
 import Test.Hspec
+import Text.Read (readMaybe)
 
 data Config = Config
     { hostName :: String
@@ -24,31 +26,41 @@ data Config = Config
     , userName :: T.Text
     , password :: T.Text
     , collect :: T.Text
+    , replicaName :: Maybe ReplicaSetName
     }
+
+setPID :: PortID
+setPID = PortNumber 1
 
 makeConfig :: IO Config
 makeConfig = do
     envvars <- getEnvironment
-    pure . fromJust $
-        Config
-            <$> lookup "hname" envvars
-            <*> (T.pack <$> lookup "dname" envvars)
-            <*> (T.pack <$> lookup "uname" envvars)
-            <*> (T.pack <$> lookup "pword" envvars)
-            <*> (T.pack <$> lookup "coll" envvars)
+    let config =
+            Config
+                <$> lookup "hname" envvars
+                <*> (T.pack <$> lookup "dname" envvars)
+                <*> (T.pack <$> lookup "uname" envvars)
+                <*> (T.pack <$> lookup "pword" envvars)
+                <*> (T.pack <$> lookup "coll" envvars)
+                <*> pure (T.pack <$> lookup "repname" envvars)
+    pure $ fromJust config
 
 setupAuthConnection :: Config -> IO (Either T.Text Pipe)
 setupAuthConnection Config{..} =
     let loginWith p = do
             is_logged_in <- access p master admin $ auth userName password
             if is_logged_in then pure $ Right p else pure $ Left "Login failed"
-     in openReplicaSetSRV' hostName >>= \repset ->
+     in selectRep replicaName >>= \repset ->
             try (primary repset) >>= \case
                 Left (SomeException _) ->
                     try (secondaryOk repset) >>= \case
                         Left (SomeException err) -> pure . Left . T.pack . show $ err
                         Right pipe -> loginWith pipe
                 Right pipe -> loginWith pipe
+  where
+    selectRep = case replicaName of
+        Nothing -> pure $ openReplicaSetSRV' hostName
+        Just name -> pure $ openReplicaSet (name, [Host hostName (PortNumber 27017 :: PortID)])
 
 runMongo :: Database -> Pipe -> Action IO a -> IO a
 runMongo db_name p = access p master db_name
@@ -79,6 +91,7 @@ spec = do
                 Left err -> print "Connector is not logged in!" >> undefined
                 Right c -> do
                     deleted <- runMongo databaseName c $ deleteAll collect []
+                    print $ "'Deleted' results read: " ++ show deleted
                     failed deleted `shouldBe` False
          in desc $ as target
     testWritesWith Config{..} p =
