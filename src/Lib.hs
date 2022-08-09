@@ -8,7 +8,7 @@ module Lib (
 ) where
 
 import Control.Exception (SomeException (SomeException), try)
-import Control.Monad (foldM)
+import Control.Monad (foldM, when)
 import Control.Monad.IO.Class
 import Data.Data (Data)
 import Data.Foldable (traverse_)
@@ -26,11 +26,9 @@ data Config = Config
     , userName :: T.Text
     , password :: T.Text
     , collect :: T.Text
-    , replicaName :: Maybe ReplicaSetName
+    , is_replicaset :: Bool
     }
-
-setPID :: PortID
-setPID = PortNumber 1
+    deriving (Show)
 
 makeConfig :: IO Config
 makeConfig = do
@@ -42,25 +40,25 @@ makeConfig = do
                 <*> (T.pack <$> lookup "uname" envvars)
                 <*> (T.pack <$> lookup "pword" envvars)
                 <*> (T.pack <$> lookup "coll" envvars)
-                <*> pure (T.pack <$> lookup "repname" envvars)
+                <*> ((== "true") . T.pack <$> lookup "is_replicaset" envvars)
     pure $ fromJust config
 
 setupAuthConnection :: Config -> IO (Either T.Text Pipe)
 setupAuthConnection Config{..} =
-    let loginWith p = do
-            is_logged_in <- access p master admin $ auth userName password
-            if is_logged_in then pure $ Right p else pure $ Left "Login failed"
-     in selectRep replicaName >>= \repset ->
+    if is_replicaset
+        then do
+            repset <- openReplicaSetSRV' hostName
             try (primary repset) >>= \case
                 Left (SomeException _) ->
                     try (secondaryOk repset) >>= \case
                         Left (SomeException err) -> pure . Left . T.pack . show $ err
                         Right pipe -> loginWith pipe
                 Right pipe -> loginWith pipe
+        else connect (host hostName) >>= loginWith
   where
-    selectRep = case replicaName of
-        Nothing -> pure $ openReplicaSetSRV' hostName
-        Just name -> pure $ openReplicaSet (name, [Host hostName (PortNumber 27017 :: PortID)])
+    loginWith p = do
+        is_logged_in <- access p master admin $ auth userName password
+        if is_logged_in then pure $ Right p else pure $ Left "Login failed"
 
 runMongo :: Database -> Pipe -> Action IO a -> IO a
 runMongo db_name p = access p master db_name
@@ -74,25 +72,17 @@ spec = do
     initialization = runIO $ do
         config <- makeConfig
         pipe <- setupAuthConnection config
+        when (is_replicaset config) $ print "You have connected to a *REPLICASET*"
+        print $ "Full connection credentials: " ++ show config
         pure (config, pipe)
     validateConnector c =
         let desc = describe "Validate"
-            as = it "Validate the MongoDB Atlas connector"
+            as = it "Validate a MongoDB connector"
             target = case c of
                 Left err -> print "Connector is not logged in!" >> undefined
                 Right p -> do
                     verdict <- isClosed p
                     verdict `shouldBe` False
-         in desc $ as target
-    testDeleteWith Config{..} p =
-        let desc = describe "Delete"
-            as = it "Ensures deletion works"
-            target = case p of
-                Left err -> print "Connector is not logged in!" >> undefined
-                Right c -> do
-                    deleted <- runMongo databaseName c $ deleteAll collect []
-                    print $ "'Deleted' results read: " ++ show deleted
-                    failed deleted `shouldBe` False
          in desc $ as target
     testWritesWith Config{..} p =
         let desc = describe "Writes"
@@ -113,6 +103,16 @@ spec = do
                     let action = find (select [] collect)
                     docs <- runMongo databaseName p (action >>= rest)
                     length docs `shouldBe` 3
+         in desc $ as target
+    testDeleteWith Config{..} p =
+        let desc = describe "Delete"
+            as = it "Ensures deletion works"
+            target = case p of
+                Left err -> print "Connector is not logged in!" >> undefined
+                Right c -> do
+                    deleted <- runMongo databaseName c $ deleteAll collect []
+                    print $ "'Deleted' results read: " ++ show deleted
+                    failed deleted `shouldBe` False
          in desc $ as target
 
 test :: IO ()
