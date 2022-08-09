@@ -1,6 +1,6 @@
 # test-mongo
 
-## Testing
+## Setup
 There is a Docker image available for [testing](https://github.com/why-not-try-calmer/ringo/pkgs/container/test-mongo).
 
 ```
@@ -31,6 +31,14 @@ pword=95BqF22T78gUUanH
 coll=test-collection
 ```
 
+## Testing
+The test will ensure two preliminaies:
+1. It will parse the strings passed in ENVARS.txt, instantiate a Config, try to connect and authenticate.
+2. It will delete all items on the target collection.
+
+At this point the test will exist if (1) failed, but nothing will be reported regarding (2).
+
+3. It will test writes, reads and deletions. At this stage each failure or success is reported independently.
 
 ## Building
 After cloning and cd-ing to the direct, build with:

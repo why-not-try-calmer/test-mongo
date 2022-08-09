@@ -66,24 +66,20 @@ runMongo db_name p = access p master db_name
 spec :: Spec
 spec = do
     (config, pipe) <- initialization
-    validateConnector pipe
     traverse_ (\f -> f config pipe) [testWritesWith, testDeleteWith, testReadsWith]
   where
+    cleanSlate config p = case p of
+        Left _ -> pure ()
+        Right p -> do
+            runMongo (databaseName config) p $ deleteAll (collect config) []
+            pure ()
     initialization = runIO $ do
         config <- makeConfig
         pipe <- setupAuthConnection config
+        cleanSlate config pipe
         when (is_replicaset config) $ print "You have connected to a *REPLICASET*"
         print $ "Full connection credentials: " ++ show config
         pure (config, pipe)
-    validateConnector c =
-        let desc = describe "Validate"
-            as = it "Validate a MongoDB connector"
-            target = case c of
-                Left err -> print "Connector is not logged in!" >> undefined
-                Right p -> do
-                    verdict <- isClosed p
-                    verdict `shouldBe` False
-         in desc $ as target
     testWritesWith Config{..} p =
         let desc = describe "Writes"
             as = it "Ensures writes work"
