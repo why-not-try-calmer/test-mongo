@@ -66,7 +66,7 @@ runMongo db_name p = access p master db_name
 spec :: Spec
 spec = do
     (config, pipe) <- initialization
-    traverse_ (\f -> f config pipe) [testWritesWith, testDeleteWith, testReadsWith]
+    traverse_ (\f -> f config pipe) [testWritesWith, testReadsWith, testDeleteWith]
   where
     cleanSlate config p = case p of
         Left _ -> pure ()
